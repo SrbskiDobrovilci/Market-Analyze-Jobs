@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Job Market Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            display: flex;
+        }
+        .dashboard {
+            flex: 3;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin: 20px;
+        }
+        .vacancies-panel {
+            flex: 1;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin: 20px 20px 20px 0;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .chart-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        .chart {
+            width: 30%;
+            min-width: 300px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+        .chart-title {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: #444;
+        }
+        .bar {
+            fill: #4e79a7;
+            transition: fill 0.3s;
+            cursor: pointer;
+        }
+        .bar:hover {
+            fill: #e15759;
+        }
+        .bar.selected {
+            fill: #f28e2b;
+        }
+        .axis text {
+            font-size: 12px;
+        }
+        .axis-label {
+            font-size: 14px;
+            fill: #666;
+        }
+        .tooltip {
+            position: absolute;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
+        }
+        .vacancy-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+        .vacancy-item:hover {
+            background-color: #f9f9f9;
+        }
+        .vacancy-title {
+            font-weight: bold;
+            color: #2b7bba;
+            margin-bottom: 5px;
+        }
+        .vacancy-company {
+            color: #666;
+            font-size: 14px;
+        }
+        .vacancy-salary {
+            color: #e15759;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .panel-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .no-selection {
+            color: #999;
+            text-align: center;
+            margin-top: 50px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>IT Job Market Requirements Analysis</h1>
+        <div class="chart-container">
+            <div class="chart" id="skills-chart">
+                <div class="chart-title">Top 20 Required Skills</div>
+            </div>
+            <div class="chart" id="languages-chart">
+                <div class="chart-title">Programming Language Popularity</div>
+            </div>
+            <div class="chart" id="experience-chart">
+                <div class="chart-title">Experience Requirements</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="vacancies-panel">
+        <div class="panel-title">Relevant Vacancies</div>
+        <div id="vacancies-list">
+            <div class="no-selection">Click on a chart element to view relevant vacancies</div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let jobData = [];
+        let currentSelection = null;
+        
+        // Set up tooltip
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Load data and create charts
+        Promise.all([
+            d3.csv("top_skills.csv"),
+            d3.csv("top_languages.csv"),
+            d3.csv("experience_data.csv"),
+            d3.json("job_postings.json")
+        ]).then(function(data) {
+            jobData = data[3];
+            createSkillsChart(data[0]);
+            createLanguagesChart(data[1]);
+            createExperienceChart(data[2]);
+        });
+
+        function createSkillsChart(data) {
+            const margin = {top: 30, right: 30, bottom: 70, left: 60};
+            const width = 350 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            // Sort data by count
+            data.sort((a, b) => b.Count - a.Count);
+
+            const svg = d3.select("#skills-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // X axis
+            const x = d3.scaleBand()
+                .range([0, width])
+                .domain(data.map(d => d.Skill))
+                .padding(0.2);
+            
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "translate(-10,0)rotate(-45)")
+                .style("text-anchor", "end");
+
+            // Y axis
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(data, d => +d.Count)])
+                .range([height, 0]);
+            
+            svg.append("g")
+                .call(d3.axisLeft(y));
+
+            // Bars
+            svg.selectAll("mybar")
+                .data(data)
+                .enter()
+                .append("rect")
+                .attr("x", d => x(d.Skill))
+                .attr("y", d => y(d.Count))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.Count))
+                .attr("class", "bar")
+                .attr("data-type", "skill")
+                .attr("data-value", d => d.Skill)
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`${d.Skill}<br>${d.Count} jobs`)
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                })
+                .on("click", function(event, d) {
+                    // Remove previous selection
+                    d3.selectAll(".bar.selected").classed("selected", false);
+                    // Add selection to clicked bar
+                    d3.select(this).classed("selected", true);
+                    
+                    currentSelection = {
+                        type: "skill",
+                        value: d.Skill
+                    };
+                    
+                    updateVacanciesList();
+                });
+
+            // Y axis label
+            svg.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Number of Job Postings");
+        }
+
+        function createLanguagesChart(data) {
+            const margin = {top: 30, right: 30, bottom: 70, left: 60};
+            const width = 350 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            // Sort data by count
+            data.sort((a, b) => b.Count - a.Count);
+
+            const svg = d3.select("#languages-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // X axis
+            const x = d3.scaleBand()
+                .range([0, width])
+                .domain(data.map(d => d.Language))
+                .padding(0.2);
+            
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "translate(-10,0)rotate(-45)")
+                .style("text-anchor", "end");
+
+            // Y axis
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(data, d => +d.Count)])
+                .range([height, 0]);
+            
+            svg.append("g")
+                .call(d3.axisLeft(y));
+
+            // Bars
+            svg.selectAll("mybar")
+                .data(data)
+                .enter()
+                .append("rect")
+                .attr("x", d => x(d.Language))
+                .attr("y", d => y(d.Count))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.Count))
+                .attr("class", "bar")
+                .attr("data-type", "language")
+                .attr("data-value", d => d.Language)
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`${d.Language}<br>${d.Count} jobs`)
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                })
+                .on("click", function(event, d) {
+                    // Remove previous selection
+                    d3.selectAll(".bar.selected").classed("selected", false);
+                    // Add selection to clicked bar
+                    d3.select(this).classed("selected", true);
+                    
+                    currentSelection = {
+                        type: "language",
+                        value: d.Language
+                    };
+                    
+                    updateVacanciesList();
+                });
+
+            // Y axis label
+            svg.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Number of Job Postings");
+        }
+
+        function createExperienceChart(data) {
+            const margin = {top: 30, right: 30, bottom: 70, left: 60};
+            const width = 350 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            // Sort data by count
+            data.sort((a, b) => b.Count - a.Count);
+
+            const svg = d3.select("#experience-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // X axis
+            const x = d3.scaleBand()
+                .range([0, width])
+                .domain(data.map(d => d.Experience))
+                .padding(0.2);
+            
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "translate(-10,0)rotate(-45)")
+                .style("text-anchor", "end");
+
+            // Y axis
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(data, d => +d.Count)])
+                .range([height, 0]);
+            
+            svg.append("g")
+                .call(d3.axisLeft(y));
+
+            // Bars
+            svg.selectAll("mybar")
+                .data(data)
+                .enter()
+                .append("rect")
+                .attr("x", d => x(d.Experience))
+                .attr("y", d => y(d.Count))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.Count))
+                .attr("class", "bar")
+                .attr("data-type", "experience")
+                .attr("data-value", d => d.Experience)
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`${d.Experience}<br>${d.Count} jobs`)
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                })
+                .on("click", function(event, d) {
+                    // Remove previous selection
+                    d3.selectAll(".bar.selected").classed("selected", false);
+                    // Add selection to clicked bar
+                    d3.select(this).classed("selected", true);
+                    
+                    currentSelection = {
+                        type: "experience",
+                        value: d.Experience
+                    };
+                    
+                    updateVacanciesList();
+                });
+
+            // Y axis label
+            svg.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Number of Job Postings");
+        }
+
+        function updateVacanciesList() {
+            const vacanciesList = d3.select("#vacancies-list");
+            vacanciesList.html("");
+            
+            if (!currentSelection) {
+                vacanciesList.append("div")
+                    .attr("class", "no-selection")
+                    .text("Click on a chart element to view relevant vacancies");
+                return;
+            }
+            
+            // Filter jobs based on selection
+            let filteredJobs = [];
+            
+            if (currentSelection.type === "skill") {
+                filteredJobs = jobData.filter(job => 
+                    job.skills.skills.includes(currentSelection.value)
+                );
+            } 
+            else if (currentSelection.type === "language") {
+                filteredJobs = jobData.filter(job => 
+                    job.skills.languages.includes(currentSelection.value)
+                );
+            }
+            else if (currentSelection.type === "experience") {
+                filteredJobs = jobData.filter(job => 
+                    job.experience.includes(currentSelection.value)
+                );
+            }
+            
+            // Add title showing what's selected
+            vacanciesList.append("div")
+                .attr("class", "panel-title")
+                .text(`${filteredJobs.length} vacancies with ${currentSelection.type}: ${currentSelection.value}`);
+            
+            if (filteredJobs.length === 0) {
+                vacanciesList.append("div")
+                    .attr("class", "no-selection")
+                    .text("No vacancies match this criteria");
+                return;
+            }
+            
+            // Add each job to the list
+            const jobItems = vacanciesList.selectAll(".vacancy-item")
+                .data(filteredJobs)
+                .enter()
+                .append("div")
+                .attr("class", "vacancy-item");
+            
+            jobItems.append("div")
+                .attr("class", "vacancy-title")
+                .text(d => d.title)
+                .on("click", (event, d) => {
+                    window.open(d.link, "_blank");
+                });
+                
+            jobItems.append("div")
+                .attr("class", "vacancy-company")
+                .text(d => d.company);
+                
+            jobItems.append("div")
+                .attr("class", "vacancy-salary")
+                .text(d => d.salary);
+        }
+    </script>
+</body>
+</html>
